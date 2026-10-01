@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Human DNA Simulation</title>
+<style>
+  :root { --bg:#070b16; --card:#0f1626; --line:#223050; --txt:#e6edf7; --mut:#8fa0bf; --A:#ff5d6c; --T:#ffd24d; --G:#4dd6a0; --C:#5aa8ff; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--txt); font-family:system-ui,Segoe UI,Roboto,sans-serif; min-height:100vh; display:flex; flex-direction:column; }
+  header { padding:12px 16px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  header h1 { font-size:18px; }
+  header small { color:var(--mut); }
+  main { flex:1; display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:12px; }
+  @media (max-width:800px){ main{ grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:10px; min-height:0; }
+  canvas { width:100%; height:420px; background:#050810; border-radius:10px; display:block; }
+  .legend { display:flex; gap:12px; font-size:13px; flex-wrap:wrap; }
+  .legend b { padding:1px 7px; border-radius:6px; color:#000; }
+  .info { font-size:12px; color:var(--mut); font-family:ui-monospace,monospace; word-break:break-all; max-height:60px; overflow:auto; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  button { background:#1b2a4a; color:var(--txt); border:1px solid var(--line); padding:9px 14px; border-radius:10px; cursor:pointer; font-size:14px; }
+  button:hover { background:#25396a; }
+  button.on { background:#c0392b; }
+  input[type=text] { flex:1; min-width:140px; background:#0a1020; color:var(--txt); border:1px solid var(--line); border-radius:10px; padding:9px 12px; font-size:14px; }
+  input[type=range]{ flex:1; }
+  #human { display:flex; flex-direction:column; gap:10px; }
+  #avatar { width:100%; height:300px; border-radius:12px; background:radial-gradient(circle at 50% 40%,#0d1830,#050810); border:2px solid var(--line); overflow:hidden; transition:.2s; }
+  #avatar.talk { border-color:var(--G); box-shadow:0 0 18px var(--G); }
+  #human #chat { height:150px; flex:none; width:100%; }
+  .grow { display:flex; flex-direction:column; gap:8px; }
+  #stageName { font-size:16px; color:var(--G); }
+  #stageDesc { font-family:inherit; font-size:13px; color:var(--txt); max-height:none; line-height:1.4; }
+  #gstats { color:#9ec5ff; }
+  @keyframes pulse { to { transform:scale(1.07); } }
+  #chat { flex:1; background:#0a1020; border:1px solid var(--line); border-radius:10px; padding:10px; height:230px; overflow-y:auto; font-size:14px; line-height:1.45; }
+  .me { color:#9ec5ff; margin-top:6px; }
+  .bot { color:#c8f5de; margin-top:6px; }
+  #cam { width:100%; max-height:150px; border-radius:10px; background:#000; display:none; object-fit:cover; }
+  .meter { height:8px; background:#0a1020; border-radius:6px; overflow:hidden; }
+  .meter i { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--G),var(--T),var(--A)); }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chips span { font-size:12px; background:#14213c; border:1px solid var(--line); padding:4px 9px; border-radius:20px; cursor:pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧬 Human DNA Simulation</h1>
+  <small>Gene: HBB (Hemoglobin beta) • Chromosome 11</small>
+</header>
+
+<main>
+  <!-- LEFT: DNA -->
+  <section class="card">
+    <canvas id="dna" width="700" height="840"></canvas>
+    <div class="legend">
+      <span><b style="background:var(--A)">A</b> Adenine</span>
+      <span><b style="background:var(--T)">T</b> Thymine</span>
+      <span><b style="background:var(--G)">G</b> Guanine</span>
+      <span><b style="background:var(--C)">C</b> Cytosine</span>
+    </div>
+    <div class="row"><label style="font-size:13px">Speed</label><input type="range" id="speed" min="0" max="10" value="3"></div>
+    <div class="info" id="seqinfo"></div>
+  </section>
+
+  <!-- RIGHT: Human -->
+  <section class="card">
+    <div id="human">
+      <div id="avatar">🧑‍🔬</div>
+      <div class="grow">
+        <b id="stageName">-</b>
+        <div class="info" id="stageDesc"></div>
+        <div class="row"><label style="font-size:13px">Growth speed</label><input type="range" id="gspeed" min="0" max="100" value="50"><span id="gx" style="font-size:13px;min-width:44px">1x</span></div>
+        <div class="row"><button id="gplay">⏸ Pause</button><button id="greset">↺ Naya human (new DNA)</button></div>
+        <div class="meter"><i id="gprog"></i></div>
+        <div class="info" id="gstats"></div>
+      </div>
+      <div id="chat"></div>
+    </div>
+
+    <div class="row">
+      <button id="micBtn">🎤 Mic</button>
+      <button id="camBtn">📷 Camera</button>
+      <button id="voiceBtn">🔊 Voice: ON</button>
+    </div>
+    <div class="meter"><i id="level"></i></div>
+    <video id="cam" autoplay playsinline muted></video>
+
+    <div class="row">
+      <input type="text" id="q" placeholder="Human se kuch bhi pucho... (e.g. DNA kya hai?)">
+      <button id="ask">Ask</button>
+    </div>
+    <div class="chips" id="chips"></div>
+  </section>
+</main>
+
+<script>
+/* ================== REAL DNA ==================
+   Human HBB (hemoglobin beta) gene — coding sequence (444 bp, 147 amino acids).
+   Source: NCBI RefSeq NM_000518. Verify at https://www.ncbi.nlm.nih.gov/nuccore/NM_000518
+   Note: the full human genome is ~3.2 billion bases (~3 GB) — too big for one HTML file,
+   so this uses one real gene. You can paste any other real sequence below. */
+let SEQ = (
+"ATGGTGCATCTGACTCCTGAGGAGAAGTCTGCCGTTACTGCCCTGTGGGGCAAGGTGAACGTGGATGAAGTTGGTGGTGAGGCCCTGGGCAGGCTGCTGGTGGTCTACCCTTGGACCCAGAGGTTCTTTGAGTCCTTTGGGGATCTGTCCACTCCTGATGCTGTTATGGGCAACCCTAAGGTGAAGGCTCATGGCAAGAAAGTGCTCGGTGCCTTTAGTGATGGCCTGGCTCACCTGGACAACCTCAAGGGCACCTTTGCCACACTGAGTGAGCTGCACTGTGACAAGCTGCACGTGGATCCTGAGAACTTCAGGCTCCTGGGCAACGTGCTGGTCTGCGTGCTGGCCCATCACTTTGGCAAAGAATTCACCCCACCAGTGCAGGCTGCCTATCAGAAAGTGGTGGCTGGTGTGGCTAATGCCCTGGCCCACAAGTATCACTAA"
+).replace(/[^ACGT]/g,"");
+const COMP = {A:"T",T:"A",G:"C",C:"G"};
+const COL  = {A:"#ff5d6c",T:"#ffd24d",G:"#4dd6a0",C:"#5aa8ff"};
+const gc = (SEQ.match(/[GC]/g)||[]).length/SEQ.length*100;
+document.getElementById("seqinfo").textContent =
+  `Length: ${SEQ.length} bp | GC content: ${gc.toFixed(1)}% | 5'-${SEQ.slice(0,60)}...-3'`;
+
+/* ================== DNA CANVAS ================== */
+const cv = document.getElementById("dna"), ctx = cv.getContext("2d");
+let t = 0, offset = 0;
+function fit(){ const r = cv.getBoundingClientRect(); cv.width = r.width*devicePixelRatio; cv.height = r.height*devicePixelRatio; }
+addEventListener("resize", fit); fit();
+
+function draw(){
+  const W = cv.width, H = cv.height, d = devicePixelRatio;
+  ctx.clearRect(0,0,W,H);
+  const sp = 34*d, R = Math.min(W*0.28, 120*d), cx = W/2;
+  const n = Math.ceil(H/sp)+2;
+  const speed = +document.getElementById("speed").value;
+  t += 0.012*speed; offset += 0.02*speed;
+  const base = Math.floor(offset), frac = offset-base;
+  const pts = [];
+  for(let i=0;i<n;i++){
+    const idx = (base+i)%SEQ.length;
+    const y = (i-frac)*sp;
+    const a = (base+i)*0.55 + t;
+    pts.push({y, s:Math.sin(a), c:Math.cos(a), b:SEQ[idx]});
+  }
+  // backbones
+  for(const side of [1,-1]){
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const x = cx + side*R*p.c; i? ctx.lineTo(x,p.y) : ctx.moveTo(x,p.y); });
+    ctx.strokeStyle = side>0 ? "rgba(120,160,255,.55)" : "rgba(255,150,200,.55)";
+    ctx.lineWidth = 4*d; ctx.stroke();
+  }
+  // rungs (back first, then front)
+  const order = pts.slice().sort((a,b)=>a.s-b.s);
+  for(const p of order){
+    const x1 = cx + R*p.c, x2 = cx - R*p.c;
+    const sc = 0.7 + 0.3*p.s, al = 0.5 + 0.5*(p.s+1)/2;
+    const b1 = p.b, b2 = COMP[p.b];
+    const mid = cx;
+    ctx.globalAlpha = al;
+    ctx.lineWidth = 5*d*sc;
+    ctx.strokeStyle = COL[b1]; ctx.beginPath(); ctx.moveTo(x1,p.y); ctx.lineTo(mid,p.y); ctx.stroke();
+    ctx.strokeStyle = COL[b2]; ctx.beginPath(); ctx.moveTo(mid,p.y); ctx.lineTo(x2,p.y); ctx.stroke();
+    for(const [x,b] of [[x1,b1],[x2,b2]]){
+      ctx.fillStyle = COL[b]; ctx.beginPath(); ctx.arc(x,p.y,11*d*sc,0,7); ctx.fill();
+      ctx.fillStyle = "#000"; ctx.font = `bold ${12*d*sc}px sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(b,x,p.y+1);
+    }
+    ctx.globalAlpha = 1;
+  }
+  requestAnimationFrame(draw);
+}
+draw();
+
+/* ================== HUMAN: GK KNOWLEDGE ================== */
+const KB = [
+ {k:["dna kya","what is dna","dna"], a:"DNA (Deoxyribonucleic Acid) ek molecule hai jo jeevit cheezon ka genetic instruction code rakhta hai. Isme 4 bases hote hain: A, T, G, C. Structure double helix hai, jo 1953 mein Watson aur Crick ne bataya (Rosalind Franklin ke X-ray data ki madad se)."},
+ {k:["base pair","kitne base","genome size","3 billion","3.2"], a:"Human genome mein lagbhag 3.2 billion base pairs hote hain, 23 chromosome pairs mein failey hue."},
+ {k:["chromosome","kromosom"], a:"Insaan mein 46 chromosomes (23 pairs) hote hain. 22 pairs autosomes aur 1 pair sex chromosomes (XX ladki, XY ladka)."},
+ {k:["gene","jeen"], a:"Gene DNA ka ek hissa hai jo ek protein ya RNA banane ka instruction deta hai. Human mein lagbhag 20,000 protein-coding genes hain."},
+ {k:["hbb","hemoglobin","haemoglobin","beta globin"], a:"Screen par jo sequence chal rahi hai wo HBB gene ka hai. Ye hemoglobin ka beta hissa banata hai, jo khoon mein oxygen le jaata hai. Is gene mein ek base badalne se sickle cell anemia ho sakta hai."},
+ {k:["sickle"], a:"Sickle cell anemia HBB gene mein ek point mutation (GAG → GTG) se hota hai, jisse glutamic acid ki jagah valine aa jaata hai."},
+ {k:["rna"], a:"RNA single-strand hota hai, isme Thymine ki jagah Uracil (U) hota hai. DNA se mRNA banta hai (transcription), phir protein banta hai (translation)."},
+ {k:["protein"], a:"Protein amino acids ki chain hai. Har 3 bases (codon) ek amino acid decide karte hain. Total 20 amino acids hote hain."},
+ {k:["codon","start codon","atg"], a:"ATG start codon hai (Methionine). Stop codons TAA, TAG, TGA hain. Dekho, is sequence ka aakhri codon TAA hai!"},
+ {k:["blood group","khoon"], a:"Blood groups A, B, AB, O hote hain (ABO gene, chromosome 9). Rh factor alag gene se aata hai. O negative universal donor hai."},
+ {k:["heart","dil"], a:"Insaani dil ek minute mein ~72 baar dhadakta hai aur din mein ~1 lakh baar. Ye 4 chambers ka muscle hai."},
+ {k:["brain","dimag"], a:"Insaani dimag mein lagbhag 86 billion neurons hote hain. Ye body ke weight ka sirf ~2% hai par ~20% energy use karta hai."},
+ {k:["bones","haddi"], a:"Adult insaan mein 206 haddiyan hoti hain. Bachhe ke paida hone par ~270 hoti hain, jo baad mein jud jaati hain."},
+ {k:["largest organ","sabse bada ang"], a:"Skin (tvacha) body ka sabse bada organ hai. Andar ka sabse bada organ liver hai."},
+ {k:["cell","cells","koshika"], a:"Insaani body mein lagbhag 30-37 trillion cells hain. Har cell (red blood cells ko chhodkar) mein nucleus aur DNA hota hai."},
+ {k:["twin","jude"], a:"Identical twins ka DNA lagbhag same hota hai. Fingerprints phir bhi alag hote hain."},
+ {k:["human genome project","hgp"], a:"Human Genome Project 1990 mein shuru hua aur 2003 mein pura hua. 2022 mein T2T consortium ne pehli complete, gap-free human genome sequence publish ki."},
+ {k:["watson","crick","franklin"], a:"Double helix model James Watson aur Francis Crick ne 1953 mein diya. Rosalind Franklin ki Photo 51 X-ray image isme bahut important thi."},
+ {k:["mutation"], a:"Mutation DNA sequence mein badlaav hai. Kuch harmless hote hain, kuch bimari karte hain, aur kuch evolution ka kaaran bante hain."},
+ {k:["crispr"], a:"CRISPR-Cas9 ek gene editing tool hai jo DNA ko kisi khaas jagah par kaat sakta hai. Iske liye 2020 ka Chemistry Nobel Prize Doudna aur Charpentier ko mila."},
+ {k:["human ki","insan ka dna","chimp","banana","similar"], a:"Insaan ka DNA chimpanzee se ~98-99% milta hai, aur kisi bhi do insaanon ka DNA ~99.9% same hota hai."},
+ {k:["india","bharat","capital"], a:"India ki capital New Delhi hai. India duniya ka sabse bada population wala desh hai (~1.4 billion)."},
+ {k:["hello","hi","hey","namaste"], a:"Namaste! Main DNA aur human body ke baare mein bata sakta hoon. Kuch pucho, jaise 'DNA kya hai?' ya 'chromosome kitne hote hain?'"}
+];
+
+const chat = document.getElementById("chat"), avatar = document.getElementById("avatar");
+let voiceOn = true;
+function say(who, txt){
+  const d = document.createElement("div"); d.className = who; d.textContent = (who==="me"?"You: ":"Human: ") + txt;
+  chat.appendChild(d); chat.scrollTop = chat.scrollHeight;
+}
+function speak(txt){
+  if(!voiceOn || !window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(txt); u.lang = "en-IN"; u.rate = 1;
+  u.onstart = ()=>avatar.classList.add("talk"); u.onend = ()=>avatar.classList.remove("talk");
+  speechSynthesis.speak(u);
+}
+function reply(txt){ say("bot", txt); speak(txt); }
+
+async function answer(q){
+  const s = q.toLowerCase();
+  let best = null, score = 0;
+  for(const e of KB){
+    let sc = 0; for(const k of e.k) if(s.includes(k)) sc += k.length;
+    if(sc > score){ score = sc; best = e; }
+  }
+  if(best) return reply(best.a);
+  // Fallback: Wikipedia (needs internet)
+  try{
+    const term = s.replace(/[?!.]/g,"").replace(/\b(what|is|are|who|kya|hai|ka|ki|ke|batao|bata|tell|me|about|the)\b/g,"").trim();
+    const r = await fetch("https://en.wikipedia.org/w/api.php?origin=*&action=opensearch&limit=1&format=json&search="+encodeURIComponent(term||s));
+    const j = await r.json();
+    if(j[1] && j[1][0]){
+      const r2 = await fetch("https://en.wikipedia.org/api/rest_v1/page/summary/"+encodeURIComponent(j[1][0]));
+      const p = await r2.json();
+      if(p.extract) return reply(p.extract.split(". ").slice(0,2).join(". ") + ".");
+    }
+  }catch(e){}
+  reply("Ye mere paas nahi hai. DNA, gene, chromosome, protein, ya human body ke baare mein pucho.");
+}
+
+function submit(){
+  const i = document.getElementById("q"); const q = i.value.trim(); if(!q) return;
+  i.value = ""; say("me", q); answer(q);
+}
+document.getElementById("ask").onclick = submit;
+document.getElementById("q").onkeydown = e=>{ if(e.key==="Enter") submit(); };
+
+const chips = document.getElementById("chips");
+["DNA kya hai?","Chromosome kitne hote hain?","HBB gene kya hai?","CRISPR kya hai?","Dimag ke baare mein batao","Human Genome Project"].forEach(t=>{
+  const s = document.createElement("span"); s.textContent = t;
+  s.onclick = ()=>{ say("me",t); answer(t); }; chips.appendChild(s);
+});
+document.getElementById("voiceBtn").onclick = e=>{
+  voiceOn = !voiceOn; e.target.textContent = "🔊 Voice: " + (voiceOn?"ON":"OFF");
+  if(!voiceOn) speechSynthesis.cancel();
+};
+
+/* ================== MIC ================== */
+let micStream = null, audioCtx, analyser, rec, micOn = false;
+const micBtn = document.getElementById("micBtn"), level = document.getElementById("level");
+micBtn.onclick = async ()=>{
+  if(micOn){ stopMic(); return; }
+  try{
+    micStream = await navigator.mediaDevices.getUserMedia({audio:true});
+  }catch(e){ return reply("Mic ki permission nahi mili."); }
+  micOn = true; micBtn.classList.add("on"); micBtn.textContent = "⏹ Stop Mic";
+  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  analyser = audioCtx.createAnalyser(); analyser.fftSize = 256;
+  audioCtx.createMediaStreamSource(micStream).connect(analyser);
+  const buf = new Uint8Array(analyser.frequencyBinCount);
+  (function meter(){
+    if(!micOn) { level.style.width = 0; return; }
+    analyser.getByteFrequencyData(buf);
+    const avg = buf.reduce((a,b)=>a+b,0)/buf.length;
+    level.style.width = Math.min(100, avg*1.6) + "%";
+    requestAnimationFrame(meter);
+  })();
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(SR){
+    rec = new SR(); rec.lang = "en-IN"; rec.continuous = true; rec.interimResults = false;
+    rec.onresult = ev=>{
+      const txt = ev.results[ev.results.length-1][0].transcript.trim();
+      if(txt){ say("me", txt); answer(txt); }
+    };
+    rec.onend = ()=>{ if(micOn) try{ rec.start(); }catch(e){} };
+    rec.start();
+  } else reply("Is browser mein voice recognition nahi hai. Chrome use karo, ya type karke pucho.");
+};
+function stopMic(){
+  micOn = false; micBtn.classList.remove("on"); micBtn.textContent = "🎤 Mic";
+  if(rec) try{ rec.stop(); }catch(e){}
+  if(micStream) micStream.getTracks().forEach(t=>t.stop());
+  if(audioCtx) audioCtx.close();
+}
+
+/* ================== CAMERA ================== */
+const camBtn = document.getElementById("camBtn"), cam = document.getElementById("cam");
+let camStream = null;
+camBtn.onclick = async ()=>{
+  if(camStream){
+    camStream.getTracks().forEach(t=>t.stop()); camStream = null;
+    cam.style.display = "none"; camBtn.classList.remove("on"); camBtn.textContent = "📷 Camera"; return;
+  }
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"}});
+    cam.srcObject = camStream; cam.style.display = "block";
+    camBtn.classList.add("on"); camBtn.textContent = "⏹ Stop Camera";
+  }catch(e){ reply("Camera ki permission nahi mili."); }
+};
+
+/* ================== HUMAN GROWS ITSELF FROM DNA ==================
+   Ek zygote (1 cell) -> embryo -> fetus -> baby -> 18 saal ka adult.
+   Timeline real biology par based hai (approx). Shapes/traits illustrative hain. */
+const lerp=(a,b,t)=>a+(b-a)*t, clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+function interp(x,pts){
+  if(x<=pts[0][0]) return pts[0][1];
+  for(let i=1;i<pts.length;i++) if(x<=pts[i][0]){ const t=(x-pts[i-1][0])/(pts[i][0]-pts[i-1][0]); return lerp(pts[i-1][1],pts[i][1],t); }
+  return pts[pts.length-1][1];
+}
+const rgb=a=>`rgb(${a[0]|0},${a[1]|0},${a[2]|0})`, mixc=(a,b,t)=>a.map((v,i)=>lerp(v,b[i],t));
+
+// d = conception ke baad din (birth = 266, 18 saal = 266 + 6570)
+const KF=[
+ {d:0,n:"1. Zygote (1 cell)",t:"Day 0: sperm + egg mil gaye. Ek hi cell, 46 chromosomes. Poora human blueprint is ek cell ke DNA mein hai.",g:"Maa + papa ka DNA merge hota hai"},
+ {d:1,n:"2. Do cells",t:"Cell divide hoti hai (cleavage). Cells chhoti hoti jaati hain, total size lagbhag same rehta hai.",g:"Abhi maa se mile proteins/mRNA kaam chala rahe hain"},
+ {d:2,n:"3. Chaar cells",t:"Har ~12-24 ghante mein cells double hoti hain: 1 → 2 → 4 → 8...",g:"Embryo apna DNA padhna shuru karne wala hai"},
+ {d:3,n:"4. Aath cells",t:"Day 3: 8 cells. Har cell mein poora same DNA hai.",g:"Zygotic genome activation (embryo apne genes ON karta hai)"},
+ {d:4,n:"5. Morula",t:"Day 4: 16+ cells ka theek gola, shehtoot jaisa.",g:"CDH1 (cells ko chipkaye rakhta hai)"},
+ {d:6,n:"6. Blastocyst",t:"Day 5-6: andar khali jagah. Bahar ki cells placenta banati hain, andar ka cell mass (inner cell mass) baby.",g:"OCT4, NANOG, CDX2 - kaun cell baby, kaun placenta"},
+ {d:12,n:"7. Implantation + disc",t:"Day 6-12: embryo bachedani ki deewar mein lagta hai aur ek chapti embryonic disc banti hai.",g:"hCG hormone signal, WNT/NODAL pathways"},
+ {d:16,n:"8. Gastrulation (3 layers)",t:"Week 3: teen layers: ectoderm (skin, dimag), mesoderm (muscle, haddi, dil), endoderm (aant, phephde).",g:"TBXT (Brachyury), NODAL, WNT3"},
+ {d:22,n:"9. Dil dhadakna shuru",t:"Day ~22: heart tube dhadakne lagti hai. Neural tube se dimag aur spinal cord banenge.",g:"NKX2-5, GATA4 (dil), PAX6, SOX2, SHH (dimag)"},
+ {d:30,n:"10. Haath-pair ki kaliyan",t:"Week 4-5: limb buds nikalti hain. Embryo ek C-shape mein curled hai, poonch bhi dikhti hai.",g:"HOX genes, SHH, TBX5 (haath), TBX4 (pair)"},
+ {d:56,n:"11. Fetus ban gaya (week 8)",t:"Week 8: sab major organs ban gaye, ungliyan, aankhein, kaan. Ab ise fetus kehte hain.",g:"SOX9 (haddi), PAX6 (aankh), Y chromosome par SRY (ladka)"},
+ {d:84,n:"12. Week 12",t:"Chehra saaf, nakhun aur reflexes. Lagbhag 6-8 cm lamba.",g:"Hormone aur nervous system genes"},
+ {d:140,n:"13. Week 20",t:"Baby hilta-dulta hai, skin aur baal ban rahe hain. Lagbhag 25 cm.",g:"Skin (KRT) aur muscle (MYH) genes"},
+ {d:266,n:"14. Janm (week 40)",t:"~50 cm, ~3 kg. Phephde pehli saans lete hain aur body seedhi hoti hai.",g:"HBB (jo gene screen par hai) fetal globin ki jagah le leta hai"},
+ {d:631,n:"15. 1 saal",t:"Baby chalna seekhta hai. Dimag bahut tezi se grow karta hai.",g:"GH1, IGF1 (growth)"},
+ {d:2456,n:"16. 6 saal",t:"Bachpan: height aur skills badhte hain, immune system mature hota hai.",g:"HLA aur immune genes"},
+ {d:4646,n:"17. 12 saal",t:"Puberty ka daur: growth spurt aur hormonal changes.",g:"KISS1, GNRH1 (puberty)"},
+ {d:6836,n:"18. 18 saal: adult",t:"Growth lagbhag poori. Body mein ~30-37 trillion cells hain, sab mein wahi DNA jo zygote mein tha, bas alag genes ON.",g:"~20,000 genes, har cell mein alag combination ON"}
+];
+const LEN=[[0,.01],[22,.3],[30,.8],[56,3],[84,7],[140,25],[266,50],[631,75],[2456,115],[4646,150],[6836,170]];
+const REF=[[266,50],[631,80],[2456,120],[4646,155],[6836,170]];
+const HR=[[22,.46],[56,.38],[84,.33],[140,.30],[266,.25],[631,.22],[2456,.17],[4646,.15],[6836,.13]];
+const TOR=[[22,.44],[56,.40],[266,.37],[6836,.33]];
+const NECK=[[22,0],[84,.015],[266,.02],[6836,.04]];
+const CURL=[[22,2.4],[56,2.0],[140,1.4],[266,1.0],[500,.3],[900,0]];
+const KNEE=[[28,0],[56,2.1],[266,1.9],[500,.5],[900,0]];
+const ELB =[[28,0],[56,1.7],[266,1.5],[500,.5],[900,.08]];
+const LSPL=[[28,.7],[266,.5],[900,.14],[6836,.1]];
+const ASPL=[[28,1.1],[266,.7],[900,.22],[6836,.12]];
+
+// canvas ko #avatar ke andar daalo
+avatar.innerHTML="";
+const gcv=document.createElement("canvas"); gcv.style.cssText="width:100%;height:100%;display:block"; avatar.appendChild(gcv);
+const gctx=gcv.getContext("2d");
+function gfit(){ const r=avatar.getBoundingClientRect(); gcv.width=Math.max(10,r.width*devicePixelRatio); gcv.height=Math.max(10,r.height*devicePixelRatio); }
+addEventListener("resize",gfit); gfit();
+
+// DNA -> traits (illustrative: sequence ka hash skin/hair/height decide karta hai)
+let traits, mutations=0;
+function makeTraits(seq){
+  let h=2166136261>>>0;
+  for(let i=0;i<seq.length;i++){ h^=seq.charCodeAt(i); h=Math.imul(h,16777619)>>>0; }
+  const r=n=>((h>>>n)&255)/255, s=r(0);
+  const hairs=["#17110d","#3a2616","#6a4426","#b88a4a"];
+  return {skin:[lerp(105,252,s),lerp(68,208,s),lerp(48,180,s)], hair:hairs[Math.floor(r(8)*3.99)], hfac:lerp(.96,1.04,r(16)), xy:r(24)>.5};
+}
+const ORIG=SEQ;
+function updInfo(){
+  const g2=(SEQ.match(/[GC]/g)||[]).length/SEQ.length*100;
+  document.getElementById("seqinfo").textContent=`Length: ${SEQ.length} bp | GC content: ${g2.toFixed(1)}% | mutated bases vs parent: ${mutations} | 5'-${SEQ.slice(0,60)}...-3'`;
+}
+
+let u=0, playing=true, gt=0, doneSaid=false, lastStage=-1, cellN=0;
+const gspeed=document.getElementById("gspeed"), gx=document.getElementById("gx"), gplay=document.getElementById("gplay"),
+      stageName=document.getElementById("stageName"), stageDesc=document.getElementById("stageDesc"),
+      gstats=document.getElementById("gstats"), gprog=document.getElementById("gprog");
+const mult=()=>Math.pow(10,(+gspeed.value-50)/50);
+gspeed.oninput=()=>{ gx.textContent=mult().toFixed(1)+"x"; };
+gplay.onclick=()=>{ playing=!playing; gplay.textContent=playing?"⏸ Pause":"▶ Play"; };
+function newHuman(first){
+  SEQ=ORIG; mutations=0;
+  if(!first){
+    const arr=ORIG.split(""); mutations=1+Math.floor(Math.random()*3);
+    for(let i=0;i<mutations;i++){ const p=Math.floor(Math.random()*arr.length); const o="ACGT".replace(arr[p],""); arr[p]=o[Math.floor(Math.random()*3)]; }
+    SEQ=arr.join("");
+  }
+  traits=makeTraits(SEQ); u=0; lastStage=-1; doneSaid=false; playing=true; gplay.textContent="⏸ Pause"; updInfo();
+}
+document.getElementById("greset").onclick=()=>newHuman(false);
+
+const dayAt=()=>{ const i=clamp(Math.floor(u),0,KF.length-2), f=clamp(u-i,0,1); return lerp(KF[i].d,KF[i+1].d,f); };
+const fmtSize=cm=>cm<0.1?(cm*10).toFixed(2)+" mm":cm<1?(cm*10).toFixed(1)+" mm":cm<100?cm.toFixed(0)+" cm":(cm/100).toFixed(2)+" m";
+function when(day){
+  if(day<28) return "Day "+Math.floor(day);
+  if(day<266) return "Week "+Math.floor(day/7)+" (conception se)";
+  const y=(day-266)/365; return y<1?Math.round(y*12)+" mahine":y.toFixed(1)+" saal";
+}
+
+/* ---- Stage 1: cells -> blastocyst ---- */
+function drawBlast(day,cx,cy,Rb,alpha){
+  if(alpha<=0.01) return;
+  const c=gctx; c.globalAlpha=alpha;
+  const k=day>=6?6:Math.floor(day), f=day>=6?0:day-k;
+  const n=Math.pow(2,k), m=n*2, hollow=clamp((day-4)/2,0,1);
+  const rc=cnt=>Rb*0.9/Math.cbrt(cnt)*(1-0.3*hollow);
+  const lay=(i,cnt)=>{
+    if(cnt===1) return [0,0,0];
+    const y=1-2*(i+.5)/cnt, rr=Math.sqrt(1-y*y), ph=i*2.399963;
+    const rho=lerp(0.25+0.75*Math.cbrt((i+.5)/cnt),1,hollow);
+    return [Math.cos(ph)*rr*rho,y*rho,Math.sin(ph)*rr*rho];
+  };
+  const cnt=f>0?m:n; cellN=cnt;
+  const rcell=f>0?lerp(rc(n),rc(m),f):rc(n);
+  const rot=gt*0.7, cs=Math.cos(rot), sn=Math.sin(rot), S=Rb-rcell*0.9, list=[];
+  for(let j=0;j<cnt;j++){
+    let p;
+    if(f>0){ const a=lay(j>>1,n), b=lay(j,m); p=[lerp(a[0],b[0],f),lerp(a[1],b[1],f),lerp(a[2],b[2],f)]; } else p=lay(j,cnt);
+    const x=p[0]*S, y=p[1]*S, z=p[2]*S;
+    list.push([x*cs+z*sn,y,-x*sn+z*cs,0]);
+  }
+  if(hollow>0.5){
+    for(let q=0;q<8;q++){
+      const x=Rb*.3+Math.cos(q*2.4)*Rb*.12, y=-Rb*.25+Math.sin(q*1.7)*Rb*.12, z=Math.sin(q*3.1)*Rb*.12;
+      list.push([x*cs+z*sn,y,-x*sn+z*cs,1]);
+    }
+  }
+  list.sort((a,b)=>a[2]-b[2]);
+  c.strokeStyle="rgba(180,200,255,.35)"; c.lineWidth=2*devicePixelRatio; c.beginPath(); c.arc(cx,cy,Rb*1.06,0,7); c.stroke();
+  for(const p of list){
+    const r=(p[3]?Rb*.13:rcell)*(1+p[2]/(4*Rb)), x=cx+p[0], y=cy+p[1];
+    const c1=p[3]?[255,200,215]:mixc([255,228,216],[205,215,255],hollow), c2=p[3]?[240,110,150]:mixc([236,160,150],[130,150,230],hollow);
+    const gr=c.createRadialGradient(x-r*.3,y-r*.3,r*.1,x,y,r);
+    gr.addColorStop(0,rgb(c1)); gr.addColorStop(1,rgb(c2));
+    c.fillStyle=gr; c.beginPath(); c.arc(x,y,r,0,7); c.fill();
+    c.strokeStyle="rgba(0,0,0,.25)"; c.lineWidth=devicePixelRatio; c.stroke();
+  }
+}
+
+/* ---- Stage 2: embryonic disc (3 layers) + neural tube ---- */
+function drawDisc(day,cx,cy,Rb,alpha){
+  if(alpha<=0.01) return;
+  const c=gctx, d=devicePixelRatio; c.globalAlpha=alpha;
+  const asp=interp(day,[[7,1],[16,1.5],[22,2.6]]), grow=clamp((day-7)/3,0,1);
+  const rx=Rb*.85/Math.sqrt(asp)*grow, ry=Rb*.85*Math.sqrt(asp)*grow, off=ry*.07;
+  const ell=(oy,sx,sy,col)=>{ c.beginPath(); c.ellipse(cx,cy+oy,Math.max(1,rx*sx),Math.max(1,ry*sy),0,0,7); c.fillStyle=col; c.fill(); };
+  ell(off,1,1,"rgba(255,214,90,.95)");
+  if(day>=15){ const m=clamp((day-15)/3,0,1); ell(0,.95*m+.05,.96*m+.04,"rgba(235,90,90,.95)"); }
+  ell(-off,.9,.92,"rgba(80,150,255,.95)");
+  if(day>=14&&day<19){ c.strokeStyle="rgba(15,20,50,.8)"; c.lineWidth=3*d; c.beginPath(); c.moveTo(cx,cy-ry*.1); c.lineTo(cx,cy+ry*.7); c.stroke(); }
+  if(day>=18){
+    const cl=clamp((day-19)/3,0,1), gap=rx*.3*(1-cl);
+    c.strokeStyle="rgba(20,40,140,.9)"; c.lineWidth=3*d;
+    for(const s of [-1,1]){ c.beginPath(); c.moveTo(cx+s*gap,cy-ry*.75); c.lineTo(cx+s*gap,cy+ry*.6); c.stroke(); }
+  }
+  if(day>=21){ const pl=Math.sin(gt*8)*.5+.5; c.fillStyle="#ff3b4e"; c.beginPath(); c.arc(cx,cy-ry*.35,(5+3*pl)*d,0,7); c.fill(); }
+  if(day>=16&&day<22){
+    c.font=`${12*d}px system-ui`; c.textAlign="left";
+    [["Ectoderm","#5aa8ff"],["Mesoderm","#ff7b7b"],["Endoderm","#ffd24d"]].forEach((l,i)=>{ c.fillStyle=l[1]; c.fillText(l[0],cx+rx+10*d,cy-14*d+i*18*d); });
+  }
+}
+
+/* ---- Stage 3: embryo -> fetus -> baby -> adult ---- */
+function drawHuman(day,W,Hc,d,alpha){
+  if(alpha<=0.01) return;
+  const c=gctx; c.globalAlpha=alpha; c.lineCap="round"; c.lineJoin="round";
+  const len=interp(day,LEN), ref=day<266?len:interp(day,REF);
+  const Hpx=Hc*0.74*len/ref*traits.hfac;
+  const hr=interp(day,HR), tor=interp(day,TOR), neck=interp(day,NECK), legF=Math.max(.05,1-hr-tor-neck);
+  const limb=clamp((day-26)/28,0,1);
+  const lw=Math.max(2*d,Hpx*interp(day,[[26,.07],[266,.07],[6836,.05]]));
+  const tw=Hpx*interp(day,[[22,.24],[266,.22],[6836,.21]]);
+  const D=hr*Hpx, r=D/2, L=tor*Hpx, N=10, ds=L/N;
+  const legLen=legF*Hpx*limb, armLen=interp(day,[[26,.18],[266,.32],[6836,.42]])*Hpx*limb;
+  const grounded=clamp((day-266)/200,0,1), hipX=W/2, hipY=lerp(Hc*0.64,Hc*0.94-legLen,grounded);
+  const sk=rgb(mixc([255,192,186],traits.skin,clamp((day-40)/200,0,1)));
+  const cl=clamp((day-266)/40,0,1), shirt="#3f6fd1", shorts="#2c3550";
+  const seg=(x1,y1,x2,y2,w,col)=>{ c.strokeStyle=col; c.lineWidth=w; c.beginPath(); c.moveTo(x1,y1); c.lineTo(x2,y2); c.stroke(); };
+  const cloth=(x1,y1,x2,y2,w,col)=>{ if(cl<=0) return; c.globalAlpha=alpha*cl; seg(x1,y1,x2,y2,w,col); c.globalAlpha=alpha; };
+
+  if(grounded>0){ c.globalAlpha=alpha*grounded*.5; seg(W*.15,Hc*0.95,W*.85,Hc*0.95,2*d,"#3b4a6b"); c.globalAlpha=alpha; }
+
+  const curl=interp(day,CURL), sp=[[hipX,hipY,-Math.PI/2]];
+  for(let i=1;i<=N;i++){ const p=sp[i-1], th=-Math.PI/2+curl*i/N; sp.push([p[0]+Math.cos(th)*ds,p[1]+Math.sin(th)*ds,th]); }
+
+  // poonch (embryo mein)
+  if(day>26&&day<52){ const tl=Hpx*.08*(1-clamp((day-38)/14,0,1)); seg(hipX,hipY,hipX,hipY+tl,lw*.7,sk); }
+
+  // pair
+  const kb=interp(day,KNEE), ls=interp(day,LSPL);
+  for(const s of [-1,1]){
+    const px=hipX+s*tw*.22, py=hipY, a1=Math.PI/2-s*ls, a2=a1-s*kb, h=legLen*.5;
+    const k=[px+Math.cos(a1)*h,py+Math.sin(a1)*h], f=[k[0]+Math.cos(a2)*h,k[1]+Math.sin(a2)*h];
+    seg(px,py,k[0],k[1],lw,sk); seg(k[0],k[1],f[0],f[1],lw*.9,sk);
+    if(legLen>2){ c.fillStyle=sk; c.beginPath(); c.ellipse(f[0]+s*lw*.3,f[1],lw*.8,lw*.5,0,0,7); c.fill(); }
+    cloth(px,py,px+(k[0]-px)*.6,py+(k[1]-py)*.6,lw*1.14,shorts);
+  }
+
+  // dhad (torso)
+  for(let i=0;i<N;i++){
+    const w=tw*lerp(.82,1.04,i/N);
+    seg(sp[i][0],sp[i][1],sp[i+1][0],sp[i+1][1],w,sk);
+    cloth(sp[i][0],sp[i][1],sp[i+1][0],sp[i+1][1],w*1.03,i<3?shorts:shirt);
+  }
+
+  // dil
+  if(day>=22){
+    const hp=sp[Math.round(N*.72)], bpm=interp(day,[[22,70],[56,170],[140,150],[266,140],[1000,110],[6836,70]]);
+    const pl=Math.sin(gt*bpm/60*Math.PI*2)*.5+.5, hrad=Math.max(2.5*d,Hpx*.035)*(1+.25*pl);
+    c.fillStyle="#e23b4e"; c.beginPath(); c.arc(hp[0],hp[1],hrad,0,7); c.fill();
+  }
+
+  // haath
+  const S=sp[Math.round(N*.9)], hs=S[2], eb=interp(day,ELB), asp=interp(day,ASPL);
+  for(const s of [-1,1]){
+    const sx=S[0]+Math.cos(hs+s*Math.PI/2)*tw*.42, sy=S[1]+Math.sin(hs+s*Math.PI/2)*tw*.42;
+    const ua=hs+Math.PI-s*asp, fa=ua-s*eb, up=armLen*.5;
+    const e=[sx+Math.cos(ua)*up,sy+Math.sin(ua)*up], h=[e[0]+Math.cos(fa)*up,e[1]+Math.sin(fa)*up];
+    seg(sx,sy,e[0],e[1],lw,sk); seg(e[0],e[1],h[0],h[1],lw*.85,sk);
+    cloth(sx,sy,sx+(e[0]-sx)*.55,sy+(e[1]-sy)*.55,lw*1.16,shirt);
+    if(armLen>2){
+      c.fillStyle=sk; c.beginPath(); c.arc(h[0],h[1],lw*.7,0,7); c.fill();
+      if(day>=56) for(const q of [-.5,0,.5]) seg(h[0],h[1],h[0]+Math.cos(fa+q)*lw*1.3,h[1]+Math.sin(fa+q)*lw*1.3,lw*.25,sk);
+    }
+  }
+
+  // gardan + sir
+  const E=sp[N], hE=E[2], nk=neck*Hpx;
+  const hc=[E[0]+Math.cos(hE)*(nk+r*.92),E[1]+Math.sin(hE)*(nk+r*.92)];
+  if(nk>1) seg(E[0],E[1],hc[0],hc[1],lw*1.2,sk);
+  c.save(); c.translate(hc[0],hc[1]); c.rotate(hE+Math.PI/2);
+  c.fillStyle=sk; c.beginPath(); c.ellipse(0,0,r*.88,r,0,0,7); c.fill();
+  if(day>=56){ c.beginPath(); c.arc(-r*.88,0,r*.17,0,7); c.arc(r*.88,0,r*.17,0,7); c.fill(); }
+  if(day>=40&&day<184){ c.globalAlpha=alpha*(1-clamp((day-84)/100,0,1))*.6; c.fillStyle="rgb(255,140,170)"; c.beginPath(); c.ellipse(0,-r*.2,r*.55,r*.5,0,0,7); c.fill(); c.globalAlpha=alpha; }
+  if(day>=120){ c.globalAlpha=alpha*clamp((day-120)/300,0,1); c.fillStyle=traits.hair; c.beginPath(); c.ellipse(0,0,r*.9,r*1.03,0,Math.PI*1.05,Math.PI*1.95); c.closePath(); c.fill(); c.globalAlpha=alpha; }
+  if(day>=44){ c.fillStyle=day>=140?"#1a1a1a":"#2a1f3a"; for(const s of [-1,1]){ c.beginPath(); c.arc(s*r*.36,-r*.02,Math.max(1.2*d,r*.09),0,7); c.fill(); } }
+  if(day>=60){ c.strokeStyle="rgba(0,0,0,.25)"; c.lineWidth=Math.max(1,r*.05); c.beginPath(); c.moveTo(0,r*.02); c.lineTo(0,r*.2); c.stroke(); }
+  if(day>=70){ c.strokeStyle="#7a2f3a"; c.lineWidth=Math.max(1,r*.06); c.beginPath(); c.arc(0,r*.3,r*.2,.15*Math.PI,.85*Math.PI); c.stroke(); }
+  c.restore();
+}
+
+function render(){
+  const W=gcv.width, Hc=gcv.height, d=devicePixelRatio, c=gctx;
+  c.setTransform(1,0,0,1,0,0); c.globalAlpha=1; c.clearRect(0,0,W,Hc);
+  const day=dayAt(), Rb=Math.min(W,Hc)*0.27; cellN=0;
+  drawBlast(day,W/2,Hc/2,Rb,1-clamp((day-7)/2,0,1));
+  drawDisc(day,W/2,Hc/2,Rb,clamp((day-7)/2,0,1)*(1-clamp((day-21)/2,0,1)));
+  drawHuman(day,W,Hc,d,clamp((day-21)/2,0,1));
+  c.globalAlpha=1; c.fillStyle="rgba(230,237,247,.85)"; c.font=`${12*d}px system-ui`; c.textAlign="left";
+  c.fillText(fmtSize(interp(day,LEN)),10*d,Hc-10*d);
+  return day;
+}
+
+let lastT=performance.now();
+function gloop(now){
+  const dt=Math.min(.05,(now-lastT)/1000); lastT=now; gt+=dt;
+  const last=KF.length-1;
+  if(playing&&u<last) u=Math.min(last,u+dt*mult()/3);
+  const day=render();
+  const si=clamp(Math.floor(u+1e-6),0,last);
+  if(si!==lastStage){ lastStage=si; stageName.textContent=KF[si].n; stageDesc.textContent=KF[si].t+"  🧬 Active genes: "+KF[si].g; }
+  gprog.style.width=(u/last*100)+"%";
+  gstats.textContent=`${when(day)} • Size ≈ ${fmtSize(interp(day,LEN))}`+(cellN?` • Cells: ${Math.round(cellN)}`:"")+` • Chromosomes: ${traits.xy?"XY":"XX"} • DNA changes: ${mutations}`;
+  if(u>=last&&!doneSaid){ doneSaid=true; reply("Main ab pura ban gaya, 18 saal ka! Mere har cell mein wahi DNA hai jo us pehli cell (zygote) mein tha. Ab mujhse GK pucho."); }
+  requestAnimationFrame(gloop);
+}
+
+// "abhi kis stage par ho?" jaise sawaal
+const _ans=answer;
+answer=function(q){
+  if(/\b(stage|growth|umar|age)\b|kaise ban|kahan tak|abhi kya/i.test(q)){ const k=KF[Math.max(0,lastStage)]; return reply(`Abhi main "${k.n}" stage par hoon. ${k.t}`); }
+  return _ans(q);
+};
+
+newHuman(true);
+requestAnimationFrame(gloop);
+say("bot", "Dekho, ek cell se DNA ke instructions follow karke insaan khud ban raha hai. Speed bar se tez ya dheema karo. Mujhse DNA aur body ke baare mein kuch bhi pucho.");
+</script>
+</body>
+</html>
